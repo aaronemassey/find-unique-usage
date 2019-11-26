@@ -12,9 +12,9 @@ import org.jetbrains.annotations.Nullable;
 public class UniqueGroupingRule extends SingleParentUsageGroupingRule {
 
 
-    UsageAggregator usageAggregator = new UsageAggregator();
+    private UsageAggregator usageAggregator = new UsageAggregator();
 
-    public UniqueGroupingRule() {
+    UniqueGroupingRule() {
         super();
     }
 
@@ -35,6 +35,8 @@ public class UniqueGroupingRule extends SingleParentUsageGroupingRule {
 //        public UsageGroup groupUsage(@NotNull Usage usage) {
 //            return getParentGroupFor(usage, UsageTarget.EMPTY_ARRAY);
 //        }
-        return usageAggregator.getAggregateUsage(usage);
+//        return usageAggregator.getAggregateUsage(usage);
+//        return usageAggregator.usageByStringDistance(usage,0.99);
+        return usageAggregator.usageByStringDistance(usage,0.09);
     }
 }
