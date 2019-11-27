@@ -37,6 +37,7 @@ public class UniqueGroupingRule extends SingleParentUsageGroupingRule {
 //        }
 //        return usageAggregator.getAggregateUsage(usage);
 //        return usageAggregator.usageByStringDistance(usage,0.99);
-        return usageAggregator.usageByStringDistance(usage,0.09);
+//        return usageAggregator.usageByStringDistance(usage,0.09);
+        return usageAggregator.usageByAbstraction(usage);
     }
 }

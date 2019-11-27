@@ -52,35 +52,48 @@ public class UsageAggregator {
             throw new IllegalArgumentException("Invalid percent for matching");
         }
         NormalizedLevenshtein l = new NormalizedLevenshtein();
-
-        UsageInfo usageInfo = ((UsageInfo2UsageAdapter) usage).getUsageInfo();
-        String key = Objects.requireNonNull(Objects.requireNonNull(usageInfo.getElement()).getContext()).getText();
-
-        //Checking existence in map, if usage exist it does nothing, it return the usage otherwise
-        // if usage does not exist AND distanceThreshold is bigger than difference of current Key and any keys in map it put in map
         final boolean[] existed = {false};
         final String[] keyFound = new String[1];
-        keyFound[0] = key;
-        if (!usageToUniqueUsageGroup.containsKey(key)) {
-            usageToUniqueUsageGroup.forEach((k, v) -> {
-                System.out.println((k + ":" + v));
-                double distance = l.distance(key, k);
-                // if it find any key in the map that distance is less than the differenceThreshold, it means this this key does exist
-                // so true the flag for avoid inserting this key
-                if (distance < differenceThreshold) {
-                    existed[0] = true;
-                    keyFound[0] = k;
+
+        try {
+            UsageInfo usageInfo = ((UsageInfo2UsageAdapter) usage).getUsageInfo();
+            String key = Objects.requireNonNull(Objects.requireNonNull(usageInfo.getElement()).getContext()).getText();
+            //Checking existence in map, if usage exist it does nothing, it return the usage otherwise
+            // if usage does not exist AND distanceThreshold is bigger than difference of current Key and any keys in map it put in map
+            keyFound[0] = key;
+            if (!usageToUniqueUsageGroup.containsKey(key)) {
+                usageToUniqueUsageGroup.forEach((k, v) -> {
+                    System.out.println((k + ":" + v));
+                    double distance = l.distance(key, k);
+                    // if it find any key in the map that distance is less than the differenceThreshold, it means this this key does exist
+                    // so true the flag for avoid inserting this key
+                    if (distance < differenceThreshold) {
+                        existed[0] = true;
+                        keyFound[0] = k;
+                    }
+                });
+                if (!existed[0]) {
+                    usageToUniqueUsageGroup.put(keyFound[0], new UniqueUsageGroup(key));
                 }
-            });
-            if (!existed[0]) {
-                usageToUniqueUsageGroup.put(keyFound[0], new UniqueUsageGroup(key));
             }
+        } catch (NullPointerException e) {
+            e.printStackTrace(); // TODO: to be fixed
+
         }
         return usageToUniqueUsageGroup.get(keyFound[0]);
     }
 
-     public UniqueUsageGroup usageByAbstraction(Usage usage) {
-
-        return null;
+    /**
+     * Example 1:  method(2),method(100), and method(65) are placed in ONE category.
+     * Example 2: int rr=90; int rrr=90; System.out.println(a.method1A(rr)); System.out.println(a.method1A(rrr));
+     *         System.out.println(a.method1A(new Integer(45))); are placed in ONE category
+     * @param usage
+     * @return
+     */
+    public UniqueUsageGroup usageByAbstraction(Usage usage) {
+        UsageInfo usageInfo = ((UsageInfo2UsageAdapter) usage).getUsageInfo();
+        String key = Objects.requireNonNull(Objects.requireNonNull(usageInfo.getElement())).getText();
+        usageToUniqueUsageGroup.putIfAbsent(key, new UniqueUsageGroup(key));
+        return usageToUniqueUsageGroup.get(key);
     }
 }
