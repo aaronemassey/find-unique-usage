@@ -10,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 
 public class UniqueUsageGroup implements UsageGroup {
-    int usageCount = 1;
     String usageDisplayed;
 
     public UniqueUsageGroup() {
