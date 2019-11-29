@@ -11,6 +11,7 @@ import javax.swing.*;
 
 public class UniqueUsageGroup implements UsageGroup {
     String usageDisplayed;
+    int count = 1;
 
     public UniqueUsageGroup() {
         super();
@@ -20,6 +21,11 @@ public class UniqueUsageGroup implements UsageGroup {
     public UniqueUsageGroup(String usageDisplayed) {
         this.usageDisplayed = usageDisplayed;
     }
+
+    void incrementUsageCount() {
+        count++;
+    }
+
 
     @Nullable
     @Override
@@ -66,6 +72,9 @@ public class UniqueUsageGroup implements UsageGroup {
 
     @Override
     public int compareTo(@NotNull UsageGroup o) {
+        if (o instanceof UniqueUsageGroup) {
+            return this.count - ((UniqueUsageGroup) o).count;
+        }
         return 0;
     }
 }
