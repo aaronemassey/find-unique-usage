@@ -27,7 +27,7 @@ import java.util.TreeMap;
 public class UsageAggregator {
 
     private final static AstComparator AST_COMPARATOR = new AstComparator();
-    private final static double SIMILIAR_THRESHOLD = 0.5;
+    private final static double SIMILIAR_THRESHOLD = 0.54;
 
 
 
@@ -45,9 +45,28 @@ public class UsageAggregator {
         private CodeBlockUsage representativeElement;
         private UniqueUsageGroup group;
 
+        private Set<CodeBlockUsage> elements = new HashSet<>();
+
         public AstSimilarityNode(CodeBlockUsage representativeElement, UniqueUsageGroup group) {
             this.representativeElement = representativeElement;
             this.group = group;
+            elements.add(representativeElement);
+        }
+
+        public double getMinimumAstPercentageSimilarTo(CodeBlockUsage o) {
+            // TODO parallelize this?
+            double minimumSimilarity = Double.MAX_VALUE;
+            List<Double> similarities = new LinkedList<>();
+            for (CodeBlockUsage codeBlockUsage : elements) {
+                double similarity = codeBlockUsage.astPercentageSimilarTo(o);
+                similarities.add(similarity);
+                minimumSimilarity = Double.min(minimumSimilarity, similarity);
+            }
+            if (similarities.isEmpty()) {
+                return minimumSimilarity;
+            }
+            double total = similarities.stream().mapToDouble(d -> d).sum();
+            return total / similarities.size();
         }
 
         public CodeBlockUsage getRepresentativeElement() {
@@ -57,15 +76,13 @@ public class UsageAggregator {
         public UniqueUsageGroup getGroup() {
             return group;
         }
+
     }
 
 
 
     public synchronized UsageGroup getAggregateUsage(Usage usage) {
         UsageInfo usageInfo = ((UsageInfo2UsageAdapter) usage).getUsageInfo();
-        String key = usageInfo.getElement().getContext().getText();
-
-        AstComparator astComparator = new AstComparator();
 
         PsiElement currentElement = usageInfo.getElement();
         while (currentElement != null && !currentElement.toString().equals("PsiCodeBlock")) {
@@ -84,25 +101,34 @@ public class UsageAggregator {
 
             UniqueUsageGroup mostSimilarAstKey = null;
             double highestSimilarityRating = 0.0;
+            AstSimilarityNode astSimilarityNodeChosen = null;
             for (AstSimilarityNode astSimilarityNode: astSimilarityList) {
-                double similiarityRating = astSimilarityNode.getRepresentativeElement().astPercentageSimilarTo(codeBlockUsage);
-                if (similiarityRating > highestSimilarityRating) {
-                    highestSimilarityRating = similiarityRating;
+                double minimumSimilarityTo = astSimilarityNode.getMinimumAstPercentageSimilarTo(codeBlockUsage);
+                if (minimumSimilarityTo > highestSimilarityRating) {
                     mostSimilarAstKey = astSimilarityNode.getGroup();
+                    highestSimilarityRating = minimumSimilarityTo;
+                    astSimilarityNodeChosen = astSimilarityNode;
                 }
             }
 
             if (highestSimilarityRating > SIMILIAR_THRESHOLD) {
+                System.out.println("Aggregation occurred");
+                System.out.println(highestSimilarityRating);
                 // Check if returning exact match because classic find usages is weird.
                 if (highestSimilarityRating == 1.0) {
-                    return null; // exact match so return nothing we've got this already.
+                    throw new RuntimeException("This should never happen!");
+//                    return null; // exact match so return nothing we've got this already.
                 }
                 mostSimilarAstKey.incrementUsageCount();
+                astSimilarityNodeChosen.elements.add(codeBlockUsage);
+
                 return mostSimilarAstKey;
             }
             else {
+                System.out.println("new group occurred");
+                System.out.println(highestSimilarityRating);
                 // Create and return a codeblock usage key
-                UniqueUsageGroup newAstKey = new UniqueUsageGroup("Similar Usage");
+                UniqueUsageGroup newAstKey = new UniqueUsageGroup("Kindred Usage Group");
                 astSimilarityList.add(new AstSimilarityNode(codeBlockUsage, newAstKey));
                 return newAstKey;
             }
