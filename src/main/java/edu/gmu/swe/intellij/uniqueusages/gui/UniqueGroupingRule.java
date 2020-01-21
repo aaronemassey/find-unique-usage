@@ -1,5 +1,7 @@
 package edu.gmu.swe.intellij.uniqueusages.gui;
 
+import com.intellij.ide.IdeBundle;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.usages.Usage;
 import com.intellij.usages.UsageGroup;
 import com.intellij.usages.UsageTarget;
@@ -9,10 +11,16 @@ import edu.gmu.swe.intellij.uniqueusages.backend.UsageAggregator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class UniqueGroupingRule extends SingleParentUsageGroupingRule {
 
 
     UsageAggregator usageAggregator = new UsageAggregator();
+
+//    int count;
+//    boolean overCount;
 
     public UniqueGroupingRule() {
         super();
@@ -35,6 +43,17 @@ public class UniqueGroupingRule extends SingleParentUsageGroupingRule {
 //        public UsageGroup groupUsage(@NotNull Usage usage) {
 //            return getParentGroupFor(usage, UsageTarget.EMPTY_ARRAY);
 //        }
-        return usageAggregator.getAggregateUsage(usage);
+
+//        if (overCount) {
+//            return null;
+//        }
+//        else if (++count > 100) {
+//            overCount = true;
+////            JBPopupFactory.getInstance().createConfirmation("Do you love me?", () -> {System.out.println("said yes");}, 0);
+//            return null; // Give up after 100 usages
+//        }
+
+        UsageGroup out = usageAggregator.getAggregateUsage(usage);
+        return out;
     }
 }

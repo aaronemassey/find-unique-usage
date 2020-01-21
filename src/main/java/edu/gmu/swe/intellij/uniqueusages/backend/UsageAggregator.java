@@ -17,7 +17,7 @@ import spoon.reflect.declaration.CtClass;
 
 import javax.swing.*;
 import java.util.*;
-import java.util.concurrent.Semaphore;
+import java.util.stream.Stream;
 
 public class UsageAggregator {
 
@@ -40,29 +40,27 @@ public class UsageAggregator {
         private CodeBlockUsage representativeElement;
         private UniqueUsageGroup group;
 
-//        private Set<CodeBlockUsage> elements = new HashSet<>();
+        private Set<CodeBlockUsage> elements = new HashSet<>();
 
         public AstSimilarityNode(CodeBlockUsage representativeElement, UniqueUsageGroup group) {
             this.representativeElement = representativeElement;
             this.group = group;
-//            elements.add(representativeElement);
+            elements.add(representativeElement);
         }
 
         public double getSimilarityTo(CodeBlockUsage o) {
-            // TODO parallelize this?
-            return this.representativeElement.compareSimilarity(o);
-//            double minimumSimilarity = Double.MAX_VALUE;
-//            List<Double> similarities = new LinkedList<>();
-//            for (CodeBlockUsage codeBlockUsage : elements) {
-//                double similarity = codeBlockUsage.compareSimilarity(o);
-//                similarities.add(similarity);
-//                minimumSimilarity = Double.min(minimumSimilarity, similarity);
-//            }
-//            if (similarities.isEmpty()) {
-//                return minimumSimilarity;
-//            }
-//            double total = similarities.stream().mapToDouble(d -> d).sum();
-//            return total / similarities.size();
+//            return this.representativeElement.compareSimilarity(o);
+
+            Stream<Double> similarityStream =
+                    elements
+                            .parallelStream().map(elem -> elem.compareSimilarity(o));
+
+            Optional<Double> lowestSimilarity = similarityStream.min(Double::compareTo);
+
+            if (!lowestSimilarity.isPresent()) {
+                throw new RuntimeException("This should never happen");
+            }
+            return lowestSimilarity.get();
         }
 
         public CodeBlockUsage getRepresentativeElement() {
@@ -124,13 +122,10 @@ public class UsageAggregator {
                 System.out.println("Aggregation occurred");
                 System.out.println(highestSimilarityRating);
                 // Check if returning exact match because classic find usages is weird.
-                if (highestSimilarityRating == 1.0) {
+                if (highestSimilarityRating >= 1.0) {
                     throw new RuntimeException("This should never happen!");
-//                    return null; // exact match so return nothing we've got this already.
                 }
-//                mostSimilarAstKey.getRepresentativeElement().incrementUsageCount();
-//                astSimilarityNodeChosen.elements.add(codeBlockUsage);
-
+                mostSimilarAstKey.get().elements.add(codeBlockUsage);
                 mostSimilarAstKey.get().getGroup().incrementUsageCount();
                 return mostSimilarAstKey.get().getGroup();
             }
