@@ -36,7 +36,8 @@ public class UniqueUsageGroup implements UsageGroup {
     @NotNull
     @Override
     public String getText(@Nullable UsageView view) {
-        return usageDisplayed;
+        return String.valueOf(count);
+//        return usageDisplayed;
     }
 
     @Nullable

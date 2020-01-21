@@ -10,24 +10,19 @@ import com.intellij.usages.UsageInfo2UsageAdapter;
 import com.intellij.usages.UsageView;
 import gumtree.spoon.AstComparator;
 import gumtree.spoon.diff.Diff;
-import gumtree.spoon.diff.operations.Operation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import spoon.Launcher;
+import spoon.reflect.declaration.CtClass;
 
 import javax.swing.*;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.concurrent.Semaphore;
 
 public class UsageAggregator {
 
     private final static AstComparator AST_COMPARATOR = new AstComparator();
-    private final static double SIMILIAR_THRESHOLD = 0.54;
+    private final static double SIMILIAR_THRESHOLD = 0.12; // lower means combine more
 
 
 
@@ -45,28 +40,29 @@ public class UsageAggregator {
         private CodeBlockUsage representativeElement;
         private UniqueUsageGroup group;
 
-        private Set<CodeBlockUsage> elements = new HashSet<>();
+//        private Set<CodeBlockUsage> elements = new HashSet<>();
 
         public AstSimilarityNode(CodeBlockUsage representativeElement, UniqueUsageGroup group) {
             this.representativeElement = representativeElement;
             this.group = group;
-            elements.add(representativeElement);
+//            elements.add(representativeElement);
         }
 
-        public double getMinimumAstPercentageSimilarTo(CodeBlockUsage o) {
+        public double getSimilarityTo(CodeBlockUsage o) {
             // TODO parallelize this?
-            double minimumSimilarity = Double.MAX_VALUE;
-            List<Double> similarities = new LinkedList<>();
-            for (CodeBlockUsage codeBlockUsage : elements) {
-                double similarity = codeBlockUsage.astPercentageSimilarTo(o);
-                similarities.add(similarity);
-                minimumSimilarity = Double.min(minimumSimilarity, similarity);
-            }
-            if (similarities.isEmpty()) {
-                return minimumSimilarity;
-            }
-            double total = similarities.stream().mapToDouble(d -> d).sum();
-            return total / similarities.size();
+            return this.representativeElement.compareSimilarity(o);
+//            double minimumSimilarity = Double.MAX_VALUE;
+//            List<Double> similarities = new LinkedList<>();
+//            for (CodeBlockUsage codeBlockUsage : elements) {
+//                double similarity = codeBlockUsage.compareSimilarity(o);
+//                similarities.add(similarity);
+//                minimumSimilarity = Double.min(minimumSimilarity, similarity);
+//            }
+//            if (similarities.isEmpty()) {
+//                return minimumSimilarity;
+//            }
+//            double total = similarities.stream().mapToDouble(d -> d).sum();
+//            return total / similarities.size();
         }
 
         public CodeBlockUsage getRepresentativeElement() {
@@ -85,30 +81,43 @@ public class UsageAggregator {
         UsageInfo usageInfo = ((UsageInfo2UsageAdapter) usage).getUsageInfo();
 
         PsiElement currentElement = usageInfo.getElement();
-        while (currentElement != null && !currentElement.toString().equals("PsiCodeBlock")) {
+        while (currentElement != null && !currentElement.toString().contains("PsiMethod:")) {
             currentElement = currentElement.getContext();
         }
-        PsiElement codeBlockElement = currentElement; // TODO actually do something with this like AST diffing.
+        PsiElement codeBlockElement = currentElement;
 
         CodeBlockUsage codeBlockUsage;
         if (codeBlockElement != null) {
-            codeBlockUsage = new CodeBlockUsage(codeBlockElement);
 
-            if (codeBlockSet.contains(codeBlockUsage.getCode())) {
+            if (codeBlockSet.contains(codeBlockElement.getText())) {
                 return null;
             }
-            codeBlockSet.add(codeBlockUsage.getCode());
+            codeBlockSet.add(codeBlockElement.getText());
 
-            UniqueUsageGroup mostSimilarAstKey = null;
+            String codeBlockElementClazzName = codeBlockElement.getContext().toString().replaceFirst(".*:", "");
+            codeBlockUsage = new CodeBlockUsage(codeBlockElement, codeBlockElementClazzName);
+
+            Optional<AstSimilarityNode> mostSimilarAstKey = Optional.empty();
+
             double highestSimilarityRating = 0.0;
-            AstSimilarityNode astSimilarityNodeChosen = null;
-            for (AstSimilarityNode astSimilarityNode: astSimilarityList) {
-                double minimumSimilarityTo = astSimilarityNode.getMinimumAstPercentageSimilarTo(codeBlockUsage);
-                if (minimumSimilarityTo > highestSimilarityRating) {
-                    mostSimilarAstKey = astSimilarityNode.getGroup();
-                    highestSimilarityRating = minimumSimilarityTo;
-                    astSimilarityNodeChosen = astSimilarityNode;
-                }
+
+            mostSimilarAstKey = astSimilarityList
+                    .parallelStream()
+                    .max(
+                            (a, b) -> (int) (1000 * (a.getSimilarityTo(codeBlockUsage) - b.getSimilarityTo(codeBlockUsage)))
+                    );
+
+
+//            for (AstSimilarityNode astSimilarityNode: astSimilarityList) {
+//                double maxSimilarityTo = astSimilarityNode.getSimilarityTo(codeBlockUsage);
+//                if (maxSimilarityTo > highestSimilarityRating) {
+//                    mostSimilarAstKey = Optional.of(astSimilarityNode);
+//                    highestSimilarityRating = maxSimilarityTo;
+//                }
+//            }
+
+            if (mostSimilarAstKey.isPresent()) {
+                highestSimilarityRating = mostSimilarAstKey.get().getSimilarityTo(codeBlockUsage);
             }
 
             if (highestSimilarityRating > SIMILIAR_THRESHOLD) {
@@ -119,16 +128,17 @@ public class UsageAggregator {
                     throw new RuntimeException("This should never happen!");
 //                    return null; // exact match so return nothing we've got this already.
                 }
-                mostSimilarAstKey.incrementUsageCount();
-                astSimilarityNodeChosen.elements.add(codeBlockUsage);
+//                mostSimilarAstKey.getRepresentativeElement().incrementUsageCount();
+//                astSimilarityNodeChosen.elements.add(codeBlockUsage);
 
-                return mostSimilarAstKey;
+                mostSimilarAstKey.get().getGroup().incrementUsageCount();
+                return mostSimilarAstKey.get().getGroup();
             }
             else {
                 System.out.println("new group occurred");
                 System.out.println(highestSimilarityRating);
                 // Create and return a codeblock usage key
-                UniqueUsageGroup newAstKey = new UniqueUsageGroup("Kindred Usage Group");
+                UniqueUsageGroup newAstKey = new UniqueUsageGroup("Similar Usage Group");
                 astSimilarityList.add(new AstSimilarityNode(codeBlockUsage, newAstKey));
                 return newAstKey;
             }
@@ -191,25 +201,56 @@ public class UsageAggregator {
 
     static class CodeBlockUsage {
         private PsiElement codeBlock;
-        public CodeBlockUsage(PsiElement codeBlock) {
+        private CtClass<?> ctClass;
+
+        public CodeBlockUsage(PsiElement codeBlock, String clazzName) {
             this.codeBlock = codeBlock;
+
+            String fakeBeginStub = String.format("class %s { ", clazzName);
+            String fakeEndStub = "\n}";
+
+            this.ctClass = Launcher.parseClass(fakeBeginStub + codeBlock.getText() + fakeEndStub);
         }
         public String getCode() {
             return codeBlock.getText();
         }
 
-        public double astPercentageSimilarTo(@NotNull CodeBlockUsage o) {
-            String fakeBeginStub = "class Foo { void foo() ";
-            String fakeEndStub = "\n}";
-            String myFakeAST = fakeBeginStub + this.getCode() + fakeEndStub;
-            String otherFakeAST = fakeBeginStub + o.getCode() + fakeEndStub;
-            Diff astDiff = AST_COMPARATOR.compare(myFakeAST, otherFakeAST);
+        public double compareSimilarity(@NotNull CodeBlockUsage o) {
 
-            List<Operation> differences = astDiff.getRootOperations();
-            Set<Mapping> similiarities = astDiff.getMappingsComp().asSet();
 
-            double percentageSimilar = ((double) similiarities.size()) / (differences.size() + similiarities.size());
-            return percentageSimilar;
+            try {
+                int myFakeASTNodeCount = this.ctClass.filterChildren(null).list().size();
+
+                int otherFakeASTNodeCount = o.ctClass.filterChildren(null).list().size();
+
+                Diff astDiff = AST_COMPARATOR.compare(this.ctClass, o.ctClass);
+                Set<Mapping> similiarities = astDiff.getMappingsComp().asSet();
+
+                double simarility = 2 * similiarities.size() /
+                        (double) (2 * similiarities.size() + myFakeASTNodeCount + otherFakeASTNodeCount);
+                return simarility;
+
+            }
+            catch (Exception e) {
+                System.out.println(o.toString());
+                e.printStackTrace();
+                throw new RuntimeException();
+            }
+
+
+//            double editScriptSize = astDiff.getRootOperations().size();
+//          double normalizer = Double.max(myFakeASTNodeCount, otherFakeASTNodeCount);
+
+//            double alpha = 1 - (editScriptSize / normalizer);
+
+//            List<Operation> differences = astDiff.getRootOperations();
+
+
+//            alpha = 1 - differences.size() / Double.max(myFakeAST.length())
+
+//            double percentageSimilar = ((double) similiarities.size()) / (differences.size() + similiarities.size());
+//            return percentageSimilar;
+
         }
 
         @Override
